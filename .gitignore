@@ -1,0 +1,23 @@
+.DS_Store
+
+# Go test and coverage artifacts
+*.test
+coverage.out
+cover.out
+
+# Go workspace files
+go.work
+go.work.sum
+
+# Build directories
+bin/
+dist/
+build/
+/whichport
+
+# Editor files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
