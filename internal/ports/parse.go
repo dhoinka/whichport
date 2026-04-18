@@ -2,6 +2,8 @@ package ports
 
 import (
 	"bufio"
+	"bytes"
+	"regexp"
 	"strconv"
 	"strings"
 )
@@ -12,6 +14,8 @@ type partialListener struct {
 	PID      int
 	Command  string
 }
+
+var ssProcessPattern = regexp.MustCompile(`\("([^"]+)",pid=(\d+)`)
 
 func parseSocketOutput(protocol Protocol, output string) []partialListener {
 	var listeners []partialListener
@@ -125,6 +129,77 @@ func parsePSMetadata(output string) map[int]psMetadata {
 	}
 
 	return result
+}
+
+func parseSSOutput(protocol Protocol, output string) []partialListener {
+	var listeners []partialListener
+	seen := map[string]struct{}{}
+
+	scanner := bufio.NewScanner(strings.NewReader(output))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		fields := strings.Fields(line)
+		if len(fields) < 6 {
+			continue
+		}
+
+		port, ok := parsePort(fields[4])
+		if !ok {
+			continue
+		}
+
+		for _, match := range ssProcessPattern.FindAllStringSubmatch(line, -1) {
+			if len(match) != 3 {
+				continue
+			}
+
+			pid, err := strconv.Atoi(match[2])
+			if err != nil || pid == 0 {
+				continue
+			}
+
+			key := strings.Join([]string{
+				string(protocol),
+				strconv.Itoa(pid),
+				strconv.Itoa(port),
+			}, ":")
+			if _, exists := seen[key]; exists {
+				continue
+			}
+
+			listeners = append(listeners, partialListener{
+				Port:     port,
+				Protocol: protocol,
+				PID:      pid,
+				Command:  match[1],
+			})
+			seen[key] = struct{}{}
+		}
+	}
+
+	return listeners
+}
+
+func parseProcCmdline(output []byte) string {
+	output = bytes.TrimRight(output, "\x00")
+	if len(output) == 0 {
+		return ""
+	}
+
+	parts := bytes.Split(output, []byte{0})
+	args := make([]string, 0, len(parts))
+	for _, part := range parts {
+		if len(part) == 0 {
+			continue
+		}
+		args = append(args, string(part))
+	}
+
+	return strings.Join(args, " ")
 }
 
 func parsePort(name string) (int, bool) {

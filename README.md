@@ -12,7 +12,7 @@ It prints:
 
 ## Status
 
-Current implementation supports **macOS**.
+Current implementation supports **macOS** and **Linux**.
 
 ## Build
 
@@ -59,6 +59,13 @@ go test ./...
 go test ./internal/ports -run TestParsePSMetadata
 go test ./internal/cli -run TestTruncateMiddle
 ```
+
+## CI
+
+GitHub Actions runs the test suite and builds the CLI on **pushes to `main`** and on **pull requests** for:
+
+- `ubuntu-latest`
+- `macos-latest`
 
 ## License
 

@@ -90,3 +90,38 @@ func TestParsePSMetadata(t *testing.T) {
 		t.Fatalf("unexpected path fallback for 63152: %q", got[63152].Path)
 	}
 }
+
+func TestParseSSOutput(t *testing.T) {
+	t.Parallel()
+
+	output := `tcp LISTEN 0 4096 127.0.0.1:3000 0.0.0.0:* users:(("node",pid=63152,fd=44))
+tcp LISTEN 0 128 [::]:5432 [::]:* users:(("postgres",pid=100,fd=7),("postgres",pid=101,fd=7))
+`
+
+	got := parseSSOutput(ProtocolTCP, output)
+	if len(got) != 3 {
+		t.Fatalf("expected 3 listeners, got %d", len(got))
+	}
+
+	if got[0].PID != 63152 || got[0].Port != 3000 || got[0].Command != "node" {
+		t.Fatalf("unexpected first listener: %#v", got[0])
+	}
+
+	if got[1].PID != 100 || got[1].Port != 5432 || got[1].Command != "postgres" {
+		t.Fatalf("unexpected second listener: %#v", got[1])
+	}
+
+	if got[2].PID != 101 || got[2].Port != 5432 || got[2].Command != "postgres" {
+		t.Fatalf("unexpected third listener: %#v", got[2])
+	}
+}
+
+func TestParseProcCmdline(t *testing.T) {
+	t.Parallel()
+
+	output := []byte("/usr/bin/node\x00server.js\x00--port\x003000\x00")
+
+	if got := parseProcCmdline(output); got != "/usr/bin/node server.js --port 3000" {
+		t.Fatalf("unexpected proc cmdline: %q", got)
+	}
+}
