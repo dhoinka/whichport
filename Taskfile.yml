@@ -1,0 +1,62 @@
+version: "3"
+
+vars:
+  BINARY: whichport
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list
+    silent: true
+
+  build:
+    desc: Build the whichport CLI
+    cmds:
+      - go build -o {{.BINARY}} ./cmd/whichport
+
+  run:
+    desc: Run the CLI (pass arguments after --)
+    cmds:
+      - go run ./cmd/whichport {{.CLI_ARGS}}
+
+  test:
+    desc: Run the full test suite
+    cmds:
+      - go test ./...
+
+  test:package:
+    desc: Run tests for a package (for example, task test:package PACKAGE=./internal/ports)
+    requires:
+      vars: [PACKAGE]
+    cmds:
+      - go test {{.PACKAGE}}
+
+  test:one:
+    desc: Run one test (for example, task test:one PACKAGE=./internal/ports TEST=TestParsePSMetadata)
+    requires:
+      vars: [PACKAGE, TEST]
+    cmds:
+      - go test {{.PACKAGE}} -run '^{{.TEST}}$'
+
+  fmt:
+    desc: Format all Go packages
+    cmds:
+      - go fmt ./...
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  check:
+    desc: Run formatting checks, vet, and tests
+    cmds:
+      - test -z "$(gofmt -l .)"
+      - go vet ./...
+      - go test ./...
+
+  clean:
+    desc: Remove the built CLI binary
+    cmds:
+      - rm -f {{.BINARY}}
