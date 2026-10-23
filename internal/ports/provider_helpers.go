@@ -17,6 +17,16 @@ type processMetadata struct {
 }
 
 func runCommand(ctx context.Context, name string, args ...string) (string, error) {
+	return executeCommand(ctx, false, name, args...)
+}
+
+// lsof and ps use status 1 for no matching sockets/processes. Diagnostics
+// still indicate a failure; other commands must use runCommand.
+func runCommandAllowNoMatches(ctx context.Context, name string, args ...string) (string, error) {
+	return executeCommand(ctx, true, name, args...)
+}
+
+func executeCommand(ctx context.Context, allowNoMatches bool, name string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
@@ -29,12 +39,12 @@ func runCommand(ctx context.Context, name string, args ...string) (string, error
 	}
 
 	var exitErr *exec.ExitError
-	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+	if allowNoMatches && stderr.Len() == 0 && errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
 		return stdout.String(), nil
 	}
 
 	if stderr.Len() > 0 {
-		return "", fmt.Errorf("%s failed: %s", name, strings.TrimSpace(stderr.String()))
+		return "", fmt.Errorf("%s failed: %s: %w", name, strings.TrimSpace(stderr.String()), err)
 	}
 
 	return "", fmt.Errorf("%s failed: %w", name, err)
@@ -44,6 +54,9 @@ func uniquePIDs(listeners []partialListener) []int {
 	seen := make(map[int]struct{}, len(listeners))
 	var pids []int
 	for _, listener := range listeners {
+		if listener.PID <= 0 {
+			continue
+		}
 		if _, exists := seen[listener.PID]; exists {
 			continue
 		}

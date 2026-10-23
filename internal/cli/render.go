@@ -53,7 +53,10 @@ func (r Renderer) EmptyState() string {
 }
 
 func (r Renderer) Render(listeners []ports.Listener) string {
-	width := terminalWidth(r.out)
+	return r.renderWidth(listeners, terminalWidth(r.out))
+}
+
+func (r Renderer) renderWidth(listeners []ports.Listener, width int) string {
 	portWidth := max(4, runeWidth("PORT"))
 	protoWidth := max(5, runeWidth("PROTO"))
 	pidWidth := runeWidth("PID")
@@ -66,7 +69,7 @@ func (r Renderer) Render(listeners []ports.Listener) string {
 		displayInvocations = append(displayInvocations, displayInvocation)
 
 		portWidth = max(portWidth, runeWidth(strconv.Itoa(listener.Port)))
-		pidWidth = max(pidWidth, runeWidth(strconv.Itoa(listener.PID)))
+		pidWidth = max(pidWidth, runeWidth(displayPID(listener.PID)))
 		commandWidth = max(commandWidth, runeWidth(listener.Command))
 		invocationWidth = max(invocationWidth, runeWidth(displayInvocation))
 	}
@@ -74,10 +77,12 @@ func (r Renderer) Render(listeners []ports.Listener) string {
 	commandWidth = clamp(commandWidth, 12, 20)
 	invocationWidth = clamp(invocationWidth, 28, 72)
 	if width > 0 {
-		remaining := width - (portWidth + protoWidth + pidWidth + commandWidth + 8)
-		if remaining > 32 {
-			invocationWidth = clamp(remaining, 32, 96)
+		available := width - (portWidth + protoWidth + pidWidth + 8)
+		if available < runeWidth("COMMAND")+runeWidth("INVOCATION") {
+			return r.renderCompact(listeners, width)
 		}
+		commandWidth = min(commandWidth, available-runeWidth("INVOCATION"))
+		invocationWidth = min(96, available-commandWidth)
 	}
 
 	var lines []string
@@ -95,7 +100,7 @@ func (r Renderer) Render(listeners []ports.Listener) string {
 		lines = append(lines, joinColumns(
 			r.cell.Render(padRight(strconv.Itoa(listener.Port), portWidth)),
 			r.accent.Render(padRight(strings.ToUpper(string(listener.Protocol)), protoWidth)),
-			r.cell.Render(padRight(strconv.Itoa(listener.PID), pidWidth)),
+			r.cell.Render(padRight(displayPID(listener.PID), pidWidth)),
 			r.cell.Render(padRight(truncateMiddle(listener.Command, commandWidth), commandWidth)),
 			r.cell.Render(truncateSuffix(displayInvocations[index], invocationWidth)),
 		))
@@ -104,6 +109,26 @@ func (r Renderer) Render(listeners []ports.Listener) string {
 	lines = append(lines, "")
 	lines = append(lines, r.muted.Render(fmt.Sprintf("%d listener(s)", len(listeners))))
 	return strings.Join(lines, "\n")
+}
+
+// Below the table's minimum width, put the invocation on a separate line.
+func (r Renderer) renderCompact(listeners []ports.Listener, width int) string {
+	lines := []string{r.header.Render(truncateMiddle("LISTENERS", width))}
+	for _, listener := range listeners {
+		summary := fmt.Sprintf("%d/%s PID %s %s", listener.Port,
+			strings.ToUpper(string(listener.Protocol)), displayPID(listener.PID), listener.Command)
+		lines = append(lines, r.cell.Render(truncateMiddle(summary, width)),
+			r.cell.Render(truncateSuffix(normalizeInvocation(listener), width)))
+	}
+	lines = append(lines, "", r.muted.Render(truncateMiddle(fmt.Sprintf("%d listener(s)", len(listeners)), width)))
+	return strings.Join(lines, "\n")
+}
+
+func displayPID(pid int) string {
+	if pid <= 0 {
+		return "-"
+	}
+	return strconv.Itoa(pid)
 }
 
 func isTerminal(fd uintptr) bool {

@@ -143,16 +143,32 @@ func parseSSOutput(protocol Protocol, output string) []partialListener {
 		}
 
 		fields := strings.Fields(line)
-		if len(fields) < 6 {
+		// Single-protocol ss output omits Netid; accept both layouts.
+		localIndex := 3
+		if len(fields) > 0 && (fields[0] == "tcp" || fields[0] == "udp") {
+			localIndex++
+		}
+		if len(fields) < localIndex+2 {
 			continue
 		}
 
-		port, ok := parsePort(fields[4])
+		port, ok := parsePort(fields[localIndex])
 		if !ok {
 			continue
 		}
 
-		for _, match := range ssProcessPattern.FindAllStringSubmatch(line, -1) {
+		owners := ssProcessPattern.FindAllStringSubmatch(line, -1)
+		if len(owners) == 0 {
+			// ss can report a socket even when its owner's metadata is hidden.
+			key := string(protocol) + ":0:" + strconv.Itoa(port)
+			if _, exists := seen[key]; !exists {
+				listeners = append(listeners, partialListener{
+					Port: port, Protocol: protocol, Command: "<unavailable>",
+				})
+				seen[key] = struct{}{}
+			}
+		}
+		for _, match := range owners {
 			if len(match) != 3 {
 				continue
 			}

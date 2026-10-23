@@ -31,7 +31,7 @@ func discoverPlatform(ctx context.Context, query Query) ([]Listener, error) {
 			return nil, fmt.Errorf("unsupported protocol %q", protocol)
 		}
 
-		output, err := runCommand(ctx, "lsof", args...)
+		output, err := runCommandAllowNoMatches(ctx, "lsof", args...)
 		if err != nil {
 			return nil, err
 		}
@@ -106,7 +106,7 @@ func lookupPaths(ctx context.Context, pids []int) (map[int]string, error) {
 	paths := make(map[int]string, len(pids))
 	for _, chunk := range chunkPIDs(pids, 128) {
 		args := []string{"-Fn", "-a", "-d", "txt", "-p", joinPIDs(chunk)}
-		output, err := runCommand(ctx, "lsof", args...)
+		output, err := runCommandAllowNoMatches(ctx, "lsof", args...)
 		if err != nil {
 			return nil, err
 		}
@@ -125,7 +125,7 @@ func lookupPSMetadata(ctx context.Context, pids []int) (map[int]psMetadata, erro
 		args = append(args, "-p", strconv.Itoa(pid))
 	}
 
-	output, err := runCommand(ctx, "ps", args...)
+	output, err := runCommandAllowNoMatches(ctx, "ps", args...)
 	if err != nil {
 		return nil, err
 	}

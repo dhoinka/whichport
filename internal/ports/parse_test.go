@@ -1,6 +1,9 @@
 package ports
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
 
 func TestParseSocketOutput(t *testing.T) {
 	t.Parallel()
@@ -123,5 +126,53 @@ func TestParseProcCmdline(t *testing.T) {
 
 	if got := parseProcCmdline(output); got != "/usr/bin/node server.js --port 3000" {
 		t.Fatalf("unexpected proc cmdline: %q", got)
+	}
+}
+
+func TestParseSSOutputLayouts(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name     string
+		protocol Protocol
+		output   string
+		want     []partialListener
+	}{
+		{
+			name:     "TCP without Netid",
+			protocol: ProtocolTCP,
+			output:   `LISTEN 0 4096 127.0.0.1:3000 0.0.0.0:* users:(("node",pid=63152,fd=44))`,
+			want:     []partialListener{{Port: 3000, Protocol: ProtocolTCP, PID: 63152, Command: "node"}},
+		},
+		{
+			name:     "UDP without Netid",
+			protocol: ProtocolUDP,
+			output:   `UNCONN 0 0 [::]:5353 [::]:* users:(("avahi-daemon",pid=123,fd=12))`,
+			want:     []partialListener{{Port: 5353, Protocol: ProtocolUDP, PID: 123, Command: "avahi-daemon"}},
+		},
+		{
+			name:     "unknown TCP owner and duplicate address families",
+			protocol: ProtocolTCP,
+			output:   "LISTEN 0 128 0.0.0.0:22 0.0.0.0:*\nLISTEN 0 128 [::]:22 [::]:*\n",
+			want:     []partialListener{{Port: 22, Protocol: ProtocolTCP, Command: "<unavailable>"}},
+		},
+		{
+			name:     "unknown UDP owner with Netid",
+			protocol: ProtocolUDP,
+			output:   `udp UNCONN 0 0 0.0.0.0:5353 0.0.0.0:*`,
+			want:     []partialListener{{Port: 5353, Protocol: ProtocolUDP, Command: "<unavailable>"}},
+		},
+		{
+			name:     "malformed rows",
+			protocol: ProtocolTCP,
+			output:   "\nLISTEN 0\nLISTEN 0 128 bad-address *:*\n",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := parseSSOutput(tt.protocol, tt.output); !reflect.DeepEqual(got, tt.want) {
+				t.Fatalf("parseSSOutput() = %#v, want %#v", got, tt.want)
+			}
+		})
 	}
 }

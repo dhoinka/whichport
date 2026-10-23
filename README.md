@@ -14,6 +14,10 @@ It prints:
 
 Current implementation supports **macOS** and **Linux**.
 
+On Linux, sockets remain visible when process ownership is unavailable (for
+example, for another user's process). These rows show `-` for the PID and
+`<unavailable>` for the command. JSON uses PID `0` for an unknown owner.
+
 ## Build
 
 ```bash
